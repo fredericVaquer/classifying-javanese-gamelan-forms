@@ -1,0 +1,6 @@
+pdfplumber
+numpy
+scipy
+scikit-learn
+matplotlib
+pandas
