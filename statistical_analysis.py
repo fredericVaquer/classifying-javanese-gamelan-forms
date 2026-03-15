@@ -614,8 +614,8 @@ def plot_summary_overview(stats: dict, out_dir: Path, colors: dict):
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
-    source  = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("Javanese Gamelan Notation")
-    out_dir = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("Gamelan_Analysis_Output")
+    source  = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("dataset")
+    out_dir = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("plots")
 
     if not source.exists():
         print(f"Error: source directory not found: {source}")
