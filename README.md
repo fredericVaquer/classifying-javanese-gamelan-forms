@@ -1,226 +1,162 @@
-# Classifying Javanese Gamelan Forms
+# Automatic Classification of Javanese Gamelan Forms from Kepatihan Cipher Notation Using Machine Learning
 
-Symbolic music analysis pipeline for classifying Javanese gamelan compositions by subgenre (Ayak-Ayak, Bubaran, Ketawang, Ladrang, Lancaran, Sampak, Srepegan) directly from kepatihan (cipher) notation PDFs.
+A symbolic music analysis and classification pipeline for automatically identifying Javanese gamelan **bentuk** (cyclic architectural forms) directly from Kepatihan (cipher) notation PDFs. This project classifies 7 traditional forms — Ayak-Ayak, Bubaran, Ketawang, Ladrang, Lancaran, Sampak, and Srepegan — using both interpretable and deep learning models.
 
-Three classifiers are implemented and can be compared side-by-side:
+## Motivation
 
-| Model | Input | Key idea |
-|---|---|---|
-| Decision Tree | 29 hand-crafted features | Interpretable split rules, depth sweep |
-| MLP | 29 hand-crafted features | Learns non-linear boundaries over same features |
-| 1D CNN | Raw padded note sequences | No feature engineering — kernels slide over time |
+Most research in Music Information Retrieval (MIR) applied to non-Western traditions relies on audio-based deep learning models that act as "black boxes." This project addresses the interpretability gap by working directly with **symbolic notation**, enabling the extraction of musicologically meaningful features and the generation of human-readable decision rules. The approach combines Explainable AI (Decision Trees, Random Forest) with neural models (MLP, 1D CNN) to determine which method best suits the small-data, high-structure regime typical of ethnomusicological datasets.
 
----
+## Dataset
+
+The project uses the **Javanese Gamelan Notation Dataset** (Kurniawati et al., *Data in Brief*, 2024):
+
+- **35 compositions** across **7 bentuk** (5 pieces each)
+- Notation in **Kepatihan cipher format** using a custom Balungan TrueType font
+- Each piece folder contains the main melody PDF plus instrument-specific notation PDFs (Balungan, Bonang Barung & Bonang Penerus, Peking, Structural Instruments)
+- Classification uses only the **main melody PDF** per piece
+
+| Form (Bentuk) | Pieces | Scale (Laras)       | Characteristics                    |
+|----------------|--------|---------------------|------------------------------------|
+| Ayak-Ayak      | 5      | Slendro             | Irregular gatras per gong          |
+| Bubaran        | 5      | Pelog / Slendro     | 4 gatras per gong, similar to Lancaran |
+| Ketawang       | 5      | Pelog / Slendro     | 4 gatras per gong, includes kempyang  |
+| Ladrang        | 5      | Pelog / Slendro     | 8 gatras per gong, includes kempyang  |
+| Lancaran       | 5      | Pelog / Slendro     | 4 gatras per gong                  |
+| Sampak         | 5      | Slendro             | 2–4 gatras per gong, fast tempo    |
+| Srepegan       | 5      | Slendro             | Irregular gatras per gong          |
+
+**Citation:**
+> Kurniawati, A., Yuniarno, E. M., Suprapto, Y. K., Ifada, N., & Soewidiatmaka, N. I. (2024).
+> Notation of Javanese Gamelan dataset for traditional music applications. *Data in Brief*, 53, 110116.
+> [DOI: 10.1016/j.dib.2024.110116](https://doi.org/10.1016/j.dib.2024.110116)
 
 ## Project Structure
 
 ```
 .
-├── src/
+├── gamelan_classification.ipynb       # Main experiment notebook (start here)
+├── requirements.txt                  # Python dependencies
+├── README.md
+├── LICENSE
+│
+├── src/                              # Core Python package
 │   ├── __init__.py
-│   ├── parser.py            # PDF extraction, Note class, sequence encoding
-│   ├── features.py          # 29-dim hand-crafted feature vectors (DT + MLP)
-│   ├── data.py              # Corpus loading and stratified train/test split
-│   ├── plots.py             # All matplotlib plotting functions
-│   ├── gamelan_classifier.py  # Decision Tree model + main
-│   ├── gamelan_mlp.py         # MLP model + training + main
-│   └── gamelan_cnn.py         # 1D CNN model + training + main
+│   ├── parser.py                     # PDF extraction, Note class, sequence encoding
+│   ├── features.py                   # 29-dim hand-crafted feature vectors
+│   ├── data.py                       # Corpus loading and stratified train/test split
+│   ├── plots.py                      # Matplotlib plotting functions
+│   ├── statistical_analysis.py       # Corpus-level statistical analysis and plots
+│   ├── gamelan_classifier.py         # Decision Tree (CLI)
+│   ├── gamelan_mlp.py                # MLP classifier (CLI)
+│   └── gamelan_cnn.py                # 1D CNN classifier (CLI)
 │
-├── Javanese Gamelan Notation/   # Input data (not tracked)
+├── dataset/                          # Kepatihan notation PDFs
 │   ├── Ayak Ayak/
-│   │   └── Ayak Ayak Nem Slendro Nem/
-│   │       └── Ayak Ayak Nem Slendro Nem.pdf
 │   ├── Bubaran/
-│   └── ...
+│   ├── Ketawang/
+│   ├── Ladrang/
+│   ├── Lancaran/
+│   ├── Sampak/
+│   └── Srepegan/
 │
-├── Gamelan_Classifier_Output/   # Generated on run
-├── Gamelan_MLP_Output/
-├── Gamelan_CNN_Output/
-└── README.md
+├── docs/                             # Reference papers
+│   ├── prototype.pdf                 # Project proposal
+│   ├── gamelan-dataset-paper.pdf     # Dataset paper (Kurniawati et al., 2024)
+│   └── gamelan-cnn.pdf               # Related work (Savitri et al., 2025)
+│
+├── plots/                            # Pre-generated statistical analysis plots
+└── output/                           # Generated model outputs (gitignored)
 ```
-
----
-
-## Data Format
-
-PDF scores use **kepatihan cipher notation** with a custom Balungan TrueType font. The parser (`src/parser.py`) maps font glyphs to pitch and octave:
-
-| Letter range | Octave | Scale degrees |
-|---|---|---|
-| `A`–`G` | Low (dot below) | 7, 6, 5, 4, 3, 2, 1 |
-| `H`–`N` | Mid (no dot) | 1, 2, 3, 4, 5, 6, 7 |
-| `O`–`U` | High (dot above) | 1, 2, 3, 4, 5, 6, 7 |
-
-Beat marker characters overlay notes:
-
-| Char | Meaning |
-|---|---|
-| `)` | Kenong |
-| `^` | Kethuk |
-| `@` | Gong ageng |
-| `(` | Kempyang / gong suwukan |
-| `[` / `]` | Repeat section start / end |
-| `-` | Rest |
-
----
-
-## Input Folder Structure
-
-Each genre is a top-level folder. Each piece lives in its own subfolder, and the PDF filename must exactly match the subfolder name:
-
-```
-Javanese Gamelan Notation/
-└── Ladrang/
-    ├── Ladrang Mugi Rahayu Slendro Manyura/
-    │   └── Ladrang Mugi Rahayu Slendro Manyura.pdf   ✅ matched
-    └── Ladrang Mugi Rahayu Slendro Manyura.pdf        ❌ ignored
-```
-
----
 
 ## Installation
 
 ```bash
-pip install pdfplumber scikit-learn matplotlib numpy torch
+git clone <repository-url>
+cd classifying-javanese-gamelan-forms
+pip install -r requirements.txt
 ```
 
-Python 3.10+ recommended.
-
----
+**Python 3.10+** is required. PyTorch is needed only for the MLP and CNN models; the classical models (Decision Tree, Random Forest, SVM, KNN) require only scikit-learn.
 
 ## Usage
 
-Run all three from the **project root** (parent of `src/`):
+### Recommended: Jupyter Notebook
+
+The notebook `gamelan_classification.ipynb` provides the complete end-to-end pipeline:
 
 ```bash
-python src/gamelan_classifier "Javanese Gamelan Notation" "Gamelan_Classifier_Output"
-python src/gamelan_mlp        "Javanese Gamelan Notation" "Gamelan_MLP_Output"
-python src/gamelan_cnn        "Javanese Gamelan Notation" "Gamelan_CNN_Output"
+jupyter notebook gamelan_classification.ipynb
 ```
 
-The second argument (output directory) is optional and defaults to the names above.
+It covers dataset exploration, feature extraction, exploratory data analysis, all six models with evaluation, and a comparative summary.
 
----
+### Alternative: Command-Line Scripts
 
-## Train / Test Split
+Each model can also be run independently from the project root:
 
-All three models use the same stratified split logic (`src/data.py`):
+```bash
+python -m src.gamelan_classifier [dataset_path] [output_dir]
+python -m src.gamelan_mlp        [dataset_path] [output_dir]
+python -m src.gamelan_cnn        [dataset_path] [output_dir]
+```
 
-- Songs are sorted alphabetically per genre for reproducibility
-- **≥ 5 songs**: first 4 → train, 5th → test
-- **4 songs**: first 3 → train, 4th → test *(LOO fallback, printed as ℹ️)*
-- **< 4 songs**: all train, no test sample *(printed as ⚠️)*
+Default dataset path is `dataset/` and default output directories are under `output/`.
 
-With the current corpus (7 genres, 33 pieces), this yields **26 train / 7 test**.
+## Kepatihan Notation Encoding
 
----
+The parser (`src/parser.py`) maps Balungan TrueType font glyphs to pitch and octave:
 
-## Features (Decision Tree + MLP)
+| Letter Range | Octave         | Scale Degrees  |
+|-------------|----------------|----------------|
+| `A`–`G`     | Low (dot below)  | 7, 6, 5, 4, 3, 2, 1 |
+| `H`–`N`     | Mid (no dot)     | 1, 2, 3, 4, 5, 6, 7 |
+| `O`–`U`     | High (dot above) | 1, 2, 3, 4, 5, 6, 7 |
 
-The `extract_features()` function in `src/features.py` produces a **29-dimensional float32 vector** per piece:
+Beat marker characters overlay notes:
 
-| Group | Features | Count |
-|---|---|---|
-| Pitch distribution | % of each scale degree 1–7 | 7 |
-| Register | % notes in low / mid / high octave | 3 |
-| Complexity | Avg beat markers per note, rest ratio | 2 |
-| Intervals | Step ratio, leap ratio, mean absolute interval | 3 |
-| Gong structure | Mean / std / count of notes per gong cycle | 3 |
-| Repeats | Has repeat bracket (bool), repeat count | 2 |
-| Section presence | Buka, Merong, Inggah, Ngelik, Umpak, Suwuk | 6 |
-| Pitch entropy | Shannon entropy over pitch distribution | 1 |
-| Melodic contour | Ascending ratio, direction change rate | 2 |
-| **Total** | | **29** |
+| Character | Meaning              |
+|-----------|----------------------|
+| `)`       | Kenong               |
+| `^`       | Kethuk               |
+| `@`       | Gong ageng           |
+| `(`       | Kempyang / gong suwukan |
+| `[` / `]` | Repeat section start / end |
+| `-`       | Rest / silence       |
 
----
+## Feature Engineering
+
+The `extract_features()` function produces a **29-dimensional float32 vector** per piece:
+
+| Group              | Features                                      | Count |
+|--------------------|-----------------------------------------------|-------|
+| Pitch distribution | Percentage of each scale degree 1–7           | 7     |
+| Register           | Percentage in low / mid / high octave         | 3     |
+| Complexity         | Avg beat markers per note, rest ratio         | 2     |
+| Intervals          | Step ratio, leap ratio, mean absolute interval| 3     |
+| Gong structure     | Mean / std / count of notes per gong cycle    | 3     |
+| Repeats            | Has repeat bracket (bool), repeat count       | 2     |
+| Section presence   | Buka, Merong, Inggah, Ngelik, Umpak, Suwuk   | 6     |
+| Pitch entropy      | Shannon entropy over pitch distribution       | 1     |
+| Melodic contour    | Ascending ratio, direction change rate        | 2     |
+| **Total**          |                                               | **29**|
 
 ## Models
 
-### Decision Tree (`src/gamelan_classifier.py`)
+| Model          | Input                  | Approach                                         |
+|----------------|------------------------|--------------------------------------------------|
+| Decision Tree  | 29 features            | Interpretable split rules, depth sweep           |
+| Random Forest  | 29 features            | Ensemble of decision trees, reduced variance     |
+| SVM (RBF)      | 29 features (scaled)   | Kernel-based max-margin classifier               |
+| KNN            | 29 features (scaled)   | Distance-based nearest-neighbor voting           |
+| MLP            | 29 features (scaled)   | Two-hidden-layer neural network (64→32→7)        |
+| 1D CNN         | Raw sequences (7×T)    | Convolutional filters over time, no feature eng. |
 
-A `sklearn.tree.DecisionTreeClassifier` with a depth sweep (depths 1–15) to find the best generalising depth before fitting the final model. No standardisation needed.
+## Evaluation Protocol
 
-**Output plots:**
+Given the small dataset (35 pieces), evaluation uses:
 
-| File | Description |
-|---|---|
-| `01_confusion_matrix.png` | Predicted vs actual on test set |
-| `02_feature_importance.png` | Gini importance + permutation importance side by side |
-| `03_decision_tree.png` | Full tree visualisation with filled, coloured nodes |
-| `04_prediction_confidence.png` | Per-song class probabilities with ✓/✗ |
-| `05_feature_scatter.png` | 2D scatter on top-2 Gini features |
-| `06_depth_sweep.png` | Train vs test accuracy across depths, best depth marked |
-| `classification_report.txt` | sklearn report + full tree text rules |
-
----
-
-### MLP (`src/gamelan_mlp.py`)
-
-A two-hidden-layer PyTorch MLP. Features are z-scored with `StandardScaler` before training (critical for gradient-based optimisation).
-
-**Architecture:**
-```
-Input(29) → StandardScaler
-          → Linear(64) → BatchNorm → ReLU → Dropout(0.3)
-          → Linear(32) → BatchNorm → ReLU → Dropout(0.3)
-          → Linear(n_classes)
-```
-
-**Training:** AdamW + CosineAnnealingLR, 600 epochs, batch size 8.
-
-**Output plots:**
-
-| File | Description |
-|---|---|
-| `01_training_curves.png` | Loss and accuracy over all epochs |
-| `02_confusion_matrix.png` | Predicted vs actual on test set |
-| `03_prediction_confidence.png` | Softmax probabilities per test song |
-| `04_weight_heatmap.png` | W₁ heatmap (64×29) + column L₂ norms |
-| `05_activation_pca.png` | First hidden layer activations projected to 2D via PCA |
-| `06_hyperparam_grid.png` | 3×3 grid: lr × dropout → best test accuracy |
-
----
-
-### 1D CNN (`src/gamelan_cnn.py`)
-
-Operates on **raw note sequences** — no hand-crafted features. Each note/rest is encoded as a 7-dim vector:
-
-| Channel | Value |
-|---|---|
-| 0 | Pitch normalised: `pitch / 7` (0 = rest) |
-| 1 | Octave normalised: `(octave + 1) / 2` (0.5 for rests) |
-| 2 | Kenong (bool) |
-| 3 | Kethuk (bool) |
-| 4 | Gong (bool) |
-| 5 | Kempyang (bool) |
-| 6 | Is rest (bool) |
-
-Sequences are padded / truncated to the **95th-percentile length** across the corpus (to avoid one outlier dictating tensor size for everyone).
-
-**Architecture:**
-```
-Input (B, 7, T)
-├─ Conv1d(7→32,  k=3, pad=1) → BatchNorm → ReLU → Dropout
-├─ Conv1d(32→64, k=3, pad=1) → BatchNorm → ReLU → Dropout → MaxPool(2)
-├─ Conv1d(64→64, k=3, pad=1) → BatchNorm → ReLU → AdaptiveAvgPool(1)
-└─ Linear(64→32) → ReLU → Linear(32→n_classes)
-```
-
-**Training:** AdamW + CosineAnnealingLR, 600 epochs, batch size 8.
-
-**Output plots:**
-
-| File | Description |
-|---|---|
-| `01_training_curves.png` | Loss and accuracy over all epochs |
-| `02_confusion_matrix.png` | Predicted vs actual on test set |
-| `03_prediction_confidence.png` | Softmax probabilities per test song |
-| `04_filter_responses.png` | Conv-1 filter activations (32 filters × time) per test piece |
-| `05_input_sequences.png` | Raw 7-channel input heatmap for each test piece |
-| `06_embedding_pca.png` | Global-avg-pool embeddings projected to 2D via PCA |
-| `07_hyperparam_grid.png` | 3×3 grid: lr × dropout → best test accuracy |
-
----
+- **Leave-One-Out Cross-Validation (LOOCV):** For classical models (DT, RF, SVM, KNN). Trains on 34 pieces, tests on 1, repeated 35 times. Provides the most unbiased accuracy estimate.
+- **Stratified hold-out split (4 train / 1 test per genre):** For neural models (MLP, CNN) and visualization purposes.
 
 ## Module Dependency Graph
 
@@ -235,16 +171,19 @@ parser.py
     └── gamelan_cnn.py
 ```
 
-Nothing in `parser.py`, `features.py`, `data.py`, or `plots.py` imports from the model files — the dependency graph is strictly one-directional.
-
----
-
 ## Notes and Caveats
 
-**Small dataset.** With ~33 pieces across 7 genres, all three models are susceptible to overfitting. The depth sweep (DT) and hyperparam grid (MLP, CNN) are specifically designed to surface this. Take test accuracy figures as indicative rather than definitive.
+- **Small dataset.** With 35 pieces across 7 forms, all models are susceptible to overfitting. LOOCV and the depth sweep are specifically designed to surface this.
+- **PDF parsing edge cases.** Some pieces (e.g., Srepegan Manyura) may produce 0 events due to PDF encoding issues. The CNN handles this with zero-padding. Ayak Ayak Pamungkas produces ~3400 events due to repeated sections — the p95 truncation prevents this outlier from distorting tensor dimensions.
+- **PyTorch dependency.** The MLP and CNN require PyTorch. The classical models run on scikit-learn only.
 
-**Uneven genres.** Ayak Ayak and Sampak have 4 pieces each. The LOO fallback uses 3 train / 1 test for these genres so they still contribute a test sample, but their training representation is thinner than the 5-piece genres.
+## References
 
-**Parsing edge cases.** `Srepegan Manyura` parses to 0 events (likely a PDF encoding issue). The CNN handles this gracefully with an all-zeros placeholder sequence. `Ayak Ayak Pamungkas` produces ~3400 events (repeated sections parsed as flat sequence) — the p95 truncation ensures this doesn't distort the padded tensor size for the rest of the corpus.
+1. Kurniawati, A., et al. (2024). Notation of Javanese Gamelan dataset for traditional music applications. *Data in Brief*, 53, 110116.
+2. Savitri, N. P. D. P., et al. (2025). Classification of Gamelan Selonding Music Using Convolutional Neural Network. *Indonesian Journal of Data and Science*, 6(3).
+3. Martopangrawit (1975). *Pengetahuan Karawitan II*. ASKI Surakarta.
+4. Supanggah, R. (2002). *Bothèkan Karawitan I*. Masyarakat Seni Pertunjukan Indonesia.
 
-**PyTorch dependency.** The MLP and CNN require `torch`. The Decision Tree runs on `scikit-learn` only. All three share `pdfplumber`, `numpy`, and `matplotlib`.
+## License
+
+See [LICENSE](LICENSE) for details.

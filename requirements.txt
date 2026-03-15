@@ -4,3 +4,7 @@ scipy
 scikit-learn
 matplotlib
 pandas
+torch
+seaborn
+jupyter
+ipywidgets

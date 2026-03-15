@@ -29,9 +29,9 @@ import torch.optim as optim
 from torch.utils.data import TensorDataset, DataLoader
 from sklearn.metrics import classification_report
 
-from data import load_corpus_sequences, stratified_split, to_tensors
-from parser import N_DIMS, PAD_LEN as _PAD_LEN_DEFAULT
-from plots import (
+from .data import load_corpus_sequences, stratified_split, to_tensors
+from .parser import N_DIMS, PAD_LEN as _PAD_LEN_DEFAULT
+from .plots import (
     plot_training_curves,
     plot_confusion_matrix,
     plot_prediction_confidence,
@@ -159,8 +159,8 @@ def _hyperparam_grid(X_tr, y_tr, X_te, y_te, n_classes, n_epochs=300):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def main():
-    source  = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("Javanese Gamelan Notation")
-    out_dir = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("Gamelan_CNN_Output")
+    source  = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("dataset")
+    out_dir = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("output/cnn")
 
     if not source.exists():
         print(f"Error: source not found: {source}"); sys.exit(1)

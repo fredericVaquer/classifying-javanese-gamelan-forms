@@ -39,7 +39,7 @@ import matplotlib.patches as mpatches
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from sklearn.preprocessing import LabelEncoder
 
-from features import FEATURE_NAMES, N_FEATURES
+from .features import FEATURE_NAMES, N_FEATURES
 
 
 # ── Palette + axis style ──────────────────────────────────────────────────────

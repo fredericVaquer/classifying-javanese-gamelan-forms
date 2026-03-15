@@ -17,8 +17,9 @@ import numpy as np
 from sklearn.tree import DecisionTreeClassifier, export_text
 from sklearn.metrics import classification_report
 
-from data import load_corpus_features, stratified_split, to_arrays
-from plots import (
+from .data import load_corpus_features, stratified_split, to_arrays
+from .features import FEATURE_NAMES
+from .plots import (
     plot_confusion_matrix,
     plot_feature_importance,
     plot_decision_tree,
@@ -31,8 +32,8 @@ warnings.filterwarnings("ignore")
 
 
 def main():
-    source  = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("Javanese Gamelan Notation")
-    out_dir = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("Gamelan_Classifier_Output")
+    source  = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("dataset")
+    out_dir = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("output/decision_tree")
 
     if not source.exists():
         print(f"Error: source not found: {source}"); sys.exit(1)
@@ -96,9 +97,7 @@ def main():
         f.write(f"Test  accuracy : {clf.score(X_test, y_test):.4f}\n\n")
         f.write(report)
         f.write("\n\n── Tree text rules ──\n")
-        f.write(export_text(clf, feature_names=list(
-            __import__("features", fromlist=["FEATURE_NAMES"]).FEATURE_NAMES
-        )))
+        f.write(export_text(clf, feature_names=list(FEATURE_NAMES)))
     print(f"  Saved: {rp.name}")
 
     # 6. Plots

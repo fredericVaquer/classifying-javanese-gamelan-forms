@@ -19,17 +19,16 @@ from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
-import torch
 from sklearn.preprocessing import LabelEncoder
 
-from parser import (
+from .parser import (
     extract_raw_text,
     parse_notation,
     pdf_to_sequence,
     pad_or_truncate,
     N_DIMS,
 )
-from features import extract_features
+from .features import extract_features
 
 
 # ── Shared split logic ────────────────────────────────────────────────────────
@@ -159,11 +158,12 @@ def to_tensors(
     split_records: list[dict],
     pad_len: int,
     le: LabelEncoder | None = None,
-) -> tuple[torch.Tensor, torch.Tensor, LabelEncoder]:
+):
     """
     Pad/truncate sequences and stack into a channels-first tensor.
     Returns X: (N, N_DIMS, pad_len), y: (N,), le.
     """
+    import torch
     X_list = [pad_or_truncate(r["seq"], pad_len) for r in split_records]
     X      = np.stack(X_list, axis=0)       # (N, pad_len, N_DIMS)
     X      = X.transpose(0, 2, 1)           # (N, N_DIMS, pad_len)  channels-first

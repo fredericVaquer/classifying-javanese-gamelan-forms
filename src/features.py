@@ -11,7 +11,7 @@ from collections import Counter
 
 import numpy as np
 
-from parser import Note
+from .parser import Note
 
 
 FEATURE_NAMES: list[str] = [

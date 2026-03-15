@@ -4,142 +4,25 @@ Gamelan Statistical Analysis
 Runs musical analysis across genres (top-level category folders) and produces
 matplotlib figures saved to an output directory.
 
-Features:
-  1. Pitch distribution per genre
-  2. Register (octave) usage per genre
-  3. Note complexity (marker density) per genre
-  4. Melodic interval analysis (steps vs leaps)
-  5. Gong cycle structure / balungan density
-  6. Repeat section detection
-  7. Common sections per genre
-
 Usage:
-    python gamelan_analysis.py <source_root> [output_dir]
+    python -m src.statistical_analysis [source_root] [output_dir]
 
-    <source_root>  e.g.  "Javanese Gamelan Notation"
-    [output_dir]   defaults to "Gamelan_Analysis_Output"
-
-Requirements:
-    pip install pdfplumber matplotlib numpy
+    [source_root]  defaults to "dataset"
+    [output_dir]   defaults to "output/analysis"
 """
 
 import sys
-import os
-import re
 import math
 from pathlib import Path
 from collections import Counter, defaultdict
 
-import pdfplumber
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
 
-# ── Reuse parser from extract_gamelan_notation.py ────────────────────────────
-# We inline the minimal parts needed so this script is self-contained.
-
-NOTE_MAP: dict[str, tuple[int, int]] = {
-    "A": (7, -1), "B": (6, -1), "C": (5, -1), "D": (4, -1),
-    "E": (3, -1), "F": (2, -1), "G": (1, -1),
-    "H": (1,  0), "I": (2,  0), "J": (3,  0), "K": (4,  0),
-    "L": (5,  0), "M": (6,  0), "N": (7,  0),
-    "O": (1, +1), "P": (2, +1), "Q": (3, +1), "R": (4, +1),
-    "S": (5, +1), "T": (6, +1), "U": (7, +1),
-}
-
-SECTION_HEADERS = {"Buka", "Suwuk", "Ngelik", "Umpak", "Merong", "Inggah"}
-
-PITCH_NAMES = {1: "1", 2: "2", 3: "3", 4: "4", 5: "5", 6: "6", 7: "7"}
-REGISTER_NAMES = {-1: "Low (dot below)", 0: "Mid (no dot)", 1: "High (dot above)"}
-
-
-class Note:
-    def __init__(self, raw: str):
-        self.raw = raw
-        if raw.startswith("-+"):
-            self.prefix  = "-+"
-            self.pitch   = 0
-            self.octave  = 0
-            self.markers = "".join(c for c in raw[2:] if c in ")^@(")
-        elif raw.startswith("-") and (len(raw) == 1 or raw[1] not in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"):
-            self.prefix  = "-"
-            self.pitch   = 0
-            self.octave  = 0
-            self.markers = "".join(c for c in raw[1:] if c in ")^@(")
-        else:
-            self.prefix  = raw[0] if raw and raw[0] in "+-" else ""
-            letter       = raw.lstrip("+-")[:1].upper()
-            p, o         = NOTE_MAP.get(letter, (0, 0))
-            self.pitch   = p
-            self.octave  = o
-            self.markers = "".join(c for c in raw if c in ")^@(")
-
-    @property
-    def is_rest(self):
-        return self.pitch == 0
-
-    @property
-    def absolute_pitch(self):
-        """Pitch as a single comparable number: octave*10 + scale_degree."""
-        if self.is_rest:
-            return None
-        return self.octave * 10 + self.pitch
-
-
-def tokenize(line: str) -> list[str]:
-    return re.compile(
-        r"-\+|-(?![A-Za-z0-9])[@)^(]*|[-+]?[A-Za-z0-9.][@)^(]*|[\[\]]"
-    ).findall(line)
-
-
-def decode_tokens(tokens: list[str]) -> list:
-    return [tok if tok in ("[", "]") else Note(tok) for tok in tokens]
-
-
-def extract_raw_text(pdf_path: str) -> str:
-    with pdfplumber.open(pdf_path) as pdf:
-        return "\n".join(page.extract_text() or "" for page in pdf.pages)
-
-
-def parse_notation(raw_text: str) -> dict:
-    lines  = [ln.strip() for ln in raw_text.splitlines() if ln.strip()]
-    result = {"title": "", "laras": "", "pathet": "", "sections": []}
-    if not lines:
-        return result
-
-    title_line = lines[0]
-    result["title"] = title_line
-    m = re.search(r"laras\s+(\S+)",  title_line, re.IGNORECASE)
-    if m: result["laras"]  = m.group(1)
-    m = re.search(r"pathet\s+(\S+)", title_line, re.IGNORECASE)
-    if m: result["pathet"] = m.group(1)
-
-    current_section = None
-    for line in lines[1:]:
-        if line in SECTION_HEADERS:
-            current_section = {"name": line, "lines": [], "tokens": [], "notes": []}
-            result["sections"].append(current_section)
-            continue
-        hp = re.match(r"^(" + "|".join(SECTION_HEADERS) + r")\s+(.*)", line)
-        if hp:
-            raw_n = hp.group(2)
-            toks  = tokenize(raw_n)
-            current_section = {
-                "name": hp.group(1), "lines": [raw_n],
-                "tokens": toks, "notes": decode_tokens(toks),
-            }
-            result["sections"].append(current_section)
-            continue
-        if current_section is None:
-            current_section = {"name": "Intro", "lines": [], "tokens": [], "notes": []}
-            result["sections"].append(current_section)
-        toks = tokenize(line)
-        current_section["lines"].append(line)
-        current_section["tokens"].extend(toks)
-        current_section["notes"].extend(decode_tokens(toks))
-    return result
+from .parser import Note, extract_raw_text, parse_notation
 
 
 # ── Data loading ──────────────────────────────────────────────────────────────
@@ -615,7 +498,7 @@ def plot_summary_overview(stats: dict, out_dir: Path, colors: dict):
 
 def main():
     source  = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("dataset")
-    out_dir = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("plots")
+    out_dir = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("output/analysis")
 
     if not source.exists():
         print(f"Error: source directory not found: {source}")
