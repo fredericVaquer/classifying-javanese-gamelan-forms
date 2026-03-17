@@ -29,6 +29,12 @@ The project uses the **Javanese Gamelan Notation Dataset** (Kurniawati et al., *
 
 An augmented version of the corpus is provided in `dataset_augmented/`, created via **pitch transposition** — each original piece is shifted by ±1 to ±4 scale degrees within the 7-tone Kepatihan system. This produces **192 pieces** with an uneven class distribution (11–45 pieces per form, depending on how many transpositions remain within the valid pitch range). The augmented dataset enables Leave-One-Group-Out cross-validation (LOGOCV) for more robust evaluation.
 
+The script to generate the augmented dataset has a flag allowing for uneven class distribution. If run without, the classes are even but this one is bounded by the maximum number of possible transpositions available in the class that allows for less (Ayak ayak), giving a dataset of 11 pieces per form. Run:
+
+```bash
+python src/make_augmented_dataset.py --no-balance --src dataset --dst dataset_augmented
+```
+
 **Citation:**
 > Kurniawati, A., Yuniarno, E. M., Suprapto, Y. K., Ifada, N., & Soewidiatmaka, N. I. (2024).
 > Notation of Javanese Gamelan dataset for traditional music applications. *Data in Brief*, 53, 110116.
