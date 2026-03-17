@@ -344,7 +344,7 @@ def plot_gong_cycle_density(stats: dict, out_dir: Path, colors: dict):
         patch.set_facecolor(c)
         patch.set_alpha(0.75)
 
-    ax.set_xticks(range(len(genres)))
+    ax.set_xticks(range(1, len(genres_with_data) + 1))
     ax.set_xticklabels(genres_with_data, rotation=30, ha="right", fontsize=9)
     style_ax(ax, title="Gong Cycle Length Distribution by Genre",
              ylabel="Notes per gong cycle")

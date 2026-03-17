@@ -19,28 +19,42 @@ from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
-import torch
 from sklearn.preprocessing import LabelEncoder
 
-from src.parser import (
+from .parser import (
     extract_raw_text,
     parse_notation,
     pdf_to_sequence,
     pad_or_truncate,
     N_DIMS,
 )
-from src.features import extract_features
+from .features import extract_features
 
 
-# ── Shared split logic ────────────────────────────────────────────────────────
+# ── Augmentation helpers ─────────────────────────────────────────────────────
 
 import re as _re
 _AUG_SUFFIX = _re.compile(r"\s+shift[+-]\d+$")
 
 
-def _original_name(song_name: str) -> str:
-    """Strip augmentation suffix to recover the original piece name."""
+def original_name(song_name: str) -> str:
+    """Strip augmentation suffix (e.g. ' shift+3') to recover the original piece name."""
     return _AUG_SUFFIX.sub("", song_name)
+
+
+def get_logo_groups(records: list[dict]) -> tuple[np.ndarray, list[str]]:
+    """
+    Assign an integer group ID to each record based on its original (un-shifted)
+    piece name.  All transpositions of the same original share the same ID.
+
+    Returns (groups, unique_originals):
+      - groups: int array of shape (len(records),)
+      - unique_originals: sorted list of unique original piece names
+    """
+    originals = [original_name(r["song_name"]) for r in records]
+    unique = sorted(set(originals))
+    mapping = {name: i for i, name in enumerate(unique)}
+    return np.array([mapping[n] for n in originals]), unique
 
 
 def stratified_split(records: list[dict]) -> tuple[list[dict], list[dict]]:
@@ -74,7 +88,7 @@ def stratified_split(records: list[dict]) -> tuple[list[dict], list[dict]]:
         # Group by original piece name
         by_orig: dict[str, list] = defaultdict(list)
         for r in songs:
-            by_orig[_original_name(r["song_name"])].append(r)
+            by_orig[original_name(r["song_name"])].append(r)
 
         # Sort original names alphabetically for reproducibility
         orig_names = sorted(by_orig.keys())
@@ -209,11 +223,13 @@ def to_tensors(
     split_records: list[dict],
     pad_len: int,
     le: LabelEncoder | None = None,
-) -> tuple[torch.Tensor, torch.Tensor, LabelEncoder]:
+):
     """
     Pad/truncate sequences and stack into a channels-first tensor.
     Returns X: (N, N_DIMS, pad_len), y: (N,), le.
     """
+    import torch
+
     X_list = [pad_or_truncate(r["seq"], pad_len) for r in split_records]
     X      = np.stack(X_list, axis=0)       # (N, pad_len, N_DIMS)
     X      = X.transpose(0, 2, 1)           # (N, N_DIMS, pad_len)  channels-first

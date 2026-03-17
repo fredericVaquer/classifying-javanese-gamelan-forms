@@ -10,7 +10,7 @@ Most research in Music Information Retrieval (MIR) applied to non-Western tradit
 
 The project uses the **Javanese Gamelan Notation Dataset** (Kurniawati et al., *Data in Brief*, 2024):
 
-- **35 compositions** across **7 bentuk** (5 pieces each)
+- **35 original compositions** across **7 bentuk** (5 pieces each) in `dataset/`
 - Notation in **Kepatihan cipher format** using a custom Balungan TrueType font
 - Each piece folder contains the main melody PDF plus instrument-specific notation PDFs (Balungan, Bonang Barung & Bonang Penerus, Peking, Structural Instruments)
 - Classification uses only the **main melody PDF** per piece
@@ -25,6 +25,10 @@ The project uses the **Javanese Gamelan Notation Dataset** (Kurniawati et al., *
 | Sampak         | 5      | Slendro             | 2–4 gatras per gong, fast tempo    |
 | Srepegan       | 5      | Slendro             | Irregular gatras per gong          |
 
+### Augmented Dataset
+
+An augmented version of the corpus is provided in `dataset_augmented/`, created via **pitch transposition** — each original piece is shifted by ±1 to ±4 scale degrees within the 7-tone Kepatihan system. This produces **192 pieces** with an uneven class distribution (11–45 pieces per form, depending on how many transpositions remain within the valid pitch range). The augmented dataset enables Leave-One-Group-Out cross-validation (LOGOCV) for more robust evaluation.
+
 **Citation:**
 > Kurniawati, A., Yuniarno, E. M., Suprapto, Y. K., Ifada, N., & Soewidiatmaka, N. I. (2024).
 > Notation of Javanese Gamelan dataset for traditional music applications. *Data in Brief*, 53, 110116.
@@ -34,8 +38,9 @@ The project uses the **Javanese Gamelan Notation Dataset** (Kurniawati et al., *
 
 ```
 .
-├── gamelan_classification.ipynb       # Main experiment notebook (start here)
-├── requirements.txt                  # Python dependencies
+├── gamelan_classification.ipynb               # Baseline experiment — 35 original pieces
+├── gamelan_classification_augmented.ipynb      # Augmented experiment — 192 pieces (start here)
+├── requirements.txt                           # Python dependencies
 ├── README.md
 ├── LICENSE
 │
@@ -43,14 +48,14 @@ The project uses the **Javanese Gamelan Notation Dataset** (Kurniawati et al., *
 │   ├── __init__.py
 │   ├── parser.py                     # PDF extraction, Note class, sequence encoding
 │   ├── features.py                   # 29-dim hand-crafted feature vectors
-│   ├── data.py                       # Corpus loading and stratified train/test split
+│   ├── data.py                       # Corpus loading, stratified split, LOGO grouping
 │   ├── plots.py                      # Matplotlib plotting functions
 │   ├── statistical_analysis.py       # Corpus-level statistical analysis and plots
 │   ├── gamelan_classifier.py         # Decision Tree (CLI)
 │   ├── gamelan_mlp.py                # MLP classifier (CLI)
 │   └── gamelan_cnn.py                # 1D CNN classifier (CLI)
 │
-├── dataset/                          # Kepatihan notation PDFs
+├── dataset/                          # Original Kepatihan notation PDFs (35 pieces)
 │   ├── Ayak Ayak/
 │   ├── Bubaran/
 │   ├── Ketawang/
@@ -58,6 +63,9 @@ The project uses the **Javanese Gamelan Notation Dataset** (Kurniawati et al., *
 │   ├── Lancaran/
 │   ├── Sampak/
 │   └── Srepegan/
+│
+├── dataset_augmented/                # Pitch-transposed augmented PDFs (192 pieces)
+│   └── (same genre structure as dataset/)
 │
 ├── docs/                             # Reference papers
 │   ├── prototype.pdf                 # Project proposal
@@ -80,15 +88,20 @@ pip install -r requirements.txt
 
 ## Usage
 
-### Recommended: Jupyter Notebook
+### Recommended: Jupyter Notebooks
 
-The notebook `gamelan_classification.ipynb` provides the complete end-to-end pipeline:
+Two notebooks are provided:
+
+| Notebook | Dataset | Pieces | CV Strategy | Purpose |
+|----------|---------|--------|-------------|---------|
+| `gamelan_classification.ipynb` | `dataset/` | 35 | LOOCV | Baseline experiment |
+| `gamelan_classification_augmented.ipynb` | `dataset_augmented/` | 192 | Leave-One-Group-Out | Augmented experiment |
 
 ```bash
-jupyter notebook gamelan_classification.ipynb
+jupyter notebook gamelan_classification_augmented.ipynb
 ```
 
-It covers dataset exploration, feature extraction, exploratory data analysis, all six models with evaluation, and a comparative summary.
+Both notebooks cover dataset exploration, feature extraction, EDA, all six models with evaluation, and a comparative summary. The augmented notebook uses leak-free Leave-One-Group-Out CV to ensure no transposition of a test piece appears in training.
 
 ### Alternative: Command-Line Scripts
 
@@ -153,10 +166,15 @@ The `extract_features()` function produces a **29-dimensional float32 vector** p
 
 ## Evaluation Protocol
 
-Given the small dataset (35 pieces), evaluation uses:
+### Baseline (35 pieces)
 
-- **Leave-One-Out Cross-Validation (LOOCV):** For classical models (DT, RF, SVM, KNN). Trains on 34 pieces, tests on 1, repeated 35 times. Provides the most unbiased accuracy estimate.
-- **Stratified hold-out split (4 train / 1 test per genre):** For neural models (MLP, CNN) and visualization purposes.
+- **Leave-One-Out Cross-Validation (LOOCV):** For classical models (DT, RF, SVM, KNN). Trains on 34 pieces, tests on 1, repeated 35 times.
+- **Stratified hold-out split (4 train / 1 test per genre):** For neural models (MLP, CNN) and visualisation.
+
+### Augmented (192 pieces)
+
+- **Leave-One-Group-Out CV (LOGOCV):** Each group = one original piece + all its transpositions. 35 folds — prevents any transposition of a test piece from appearing in training.
+- **Leak-free stratified hold-out:** Groups by original piece name; all variants of train-originals go to train, all variants of test-originals go to test.
 
 ## Module Dependency Graph
 
@@ -173,9 +191,10 @@ parser.py
 
 ## Notes and Caveats
 
-- **Small dataset.** With 35 pieces across 7 forms, all models are susceptible to overfitting. LOOCV and the depth sweep are specifically designed to surface this.
+- **Small dataset.** With 35 original pieces across 7 forms, all models are susceptible to overfitting. LOOCV/LOGOCV and the depth sweep are specifically designed to surface this.
+- **Augmentation class imbalance.** Not all pieces yield the same number of valid pitch transpositions, so the augmented dataset has uneven class sizes (11–45 pieces per form). This affects hold-out evaluation more than LOGOCV.
 - **PDF parsing edge cases.** Some pieces (e.g., Srepegan Manyura) may produce 0 events due to PDF encoding issues. The CNN handles this with zero-padding. Ayak Ayak Pamungkas produces ~3400 events due to repeated sections — the p95 truncation prevents this outlier from distorting tensor dimensions.
-- **PyTorch dependency.** The MLP and CNN require PyTorch. The classical models run on scikit-learn only.
+- **PyTorch dependency.** The MLP and CNN require PyTorch. The classical models run on scikit-learn only. The `torch` import in `src/data.py` is lazy — classical-only workflows do not require PyTorch.
 
 ## References
 
