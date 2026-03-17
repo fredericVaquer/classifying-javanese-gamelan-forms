@@ -63,7 +63,7 @@ TOKEN_RE = re.compile(
     r"-\+|-(?![A-Za-z0-9])[@)^(]*|[-+]?[A-Za-z0-9.][@)^(]*|[\[\]]"
 )
 
-ALL_SHIFTS = [s for s in range(-7, 8) if s != 0]
+ALL_SHIFTS = [s for s in range(-4, 5) if s != 0]
 
 
 # ── Transposition core ────────────────────────────────────────────────────────
