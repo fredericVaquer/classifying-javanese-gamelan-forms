@@ -19,45 +19,96 @@ from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
+import torch
 from sklearn.preprocessing import LabelEncoder
 
-from .parser import (
+from src.parser import (
     extract_raw_text,
     parse_notation,
     pdf_to_sequence,
     pad_or_truncate,
     N_DIMS,
 )
-from .features import extract_features
+from src.features import extract_features
 
 
 # ── Shared split logic ────────────────────────────────────────────────────────
 
+import re as _re
+_AUG_SUFFIX = _re.compile(r"\s+shift[+-]\d+$")
+
+
+def _original_name(song_name: str) -> str:
+    """Strip augmentation suffix to recover the original piece name."""
+    return _AUG_SUFFIX.sub("", song_name)
+
+
 def stratified_split(records: list[dict]) -> tuple[list[dict], list[dict]]:
     """
-    Sort songs alphabetically per genre, then:
-      ≥5 songs  →  first 4 train, 5th test
-       4 songs  →  first 3 train, 4th test  (LOO fallback, prints ℹ️)
-      <4 songs  →  all train, warns
+    Leak-free stratified split that is aware of pitch-transposition augmentation.
+
+    For a plain dataset (no augmentation):
+      ≥5 originals  →  first 4 train, 5th test
+       4 originals  →  first 3 train, 4th test  (LOO fallback)
+      <4 originals  →  all train, warns
+
+    For an augmented dataset (song names end in ` shift±N`):
+      Records are first grouped by their *original* piece name.
+      The split is decided on originals only — keeping the same 4/1 ratio.
+      Every transposition of a train-original goes to train.
+      Every transposition of a test-original goes to test.
+      The test set contains ONLY the original (no transpositions) so it
+      evaluates on unseen, real pieces — preventing data leakage.
+
+    Both cases are handled by the same code path: if no record has a shift
+    suffix, every song_name equals its original_name and behaviour is
+    identical to the old implementation.
     """
     by_genre: dict[str, list] = defaultdict(list)
     for r in records:
         by_genre[r["genre"]].append(r)
 
     train, test = [], []
+
     for genre, songs in sorted(by_genre.items()):
-        songs_sorted = sorted(songs, key=lambda x: x["song_name"])
-        n = len(songs_sorted)
-        if n >= 5:
-            train.extend(songs_sorted[:4])
-            test.extend(songs_sorted[4:5])
-        elif n == 4:
-            print(f"  ℹ️   {genre}: 4 songs → 3 train / 1 test (LOO fallback)")
-            train.extend(songs_sorted[:3])
-            test.extend(songs_sorted[3:4])
+        # Group by original piece name
+        by_orig: dict[str, list] = defaultdict(list)
+        for r in songs:
+            by_orig[_original_name(r["song_name"])].append(r)
+
+        # Sort original names alphabetically for reproducibility
+        orig_names = sorted(by_orig.keys())
+        n_orig = len(orig_names)
+
+        if n_orig >= 5:
+            train_origs = orig_names[:4]
+            test_origs  = orig_names[4:5]
+        elif n_orig == 4:
+            print(f"  ℹ️   {genre}: 4 originals → 3 train / 1 test (LOO fallback)")
+            train_origs = orig_names[:3]
+            test_origs  = orig_names[3:4]
         else:
-            print(f"  ⚠️   {genre}: only {n} song(s) — skipping test sample")
-            train.extend(songs_sorted)
+            print(f"  ⚠️   {genre}: only {n_orig} original(s) — skipping test sample")
+            for orig in orig_names:
+                train.extend(by_orig[orig])
+            continue
+
+        # All transpositions of train-originals → train
+        for orig in train_origs:
+            train.extend(sorted(by_orig[orig], key=lambda r: r["song_name"]))
+
+        # All variants of test-originals (original + transpositions) → test.
+        # No transposition of a test-original ever appears in train, so this
+        # is leak-free while giving a larger, more informative test set that
+        # explicitly measures transposition generalisation.
+        for orig in test_origs:
+            test.extend(sorted(by_orig[orig], key=lambda r: r["song_name"]))
+
+        n_train_pieces = sum(len(by_orig[o]) for o in train_origs)
+        n_test_pieces  = sum(len(by_orig[o]) for o in test_origs)
+        print(f"  {genre}: {n_orig} originals → "
+              f"{n_train_pieces} train pieces / {n_test_pieces} test pieces")
+
     return train, test
 
 
@@ -158,12 +209,11 @@ def to_tensors(
     split_records: list[dict],
     pad_len: int,
     le: LabelEncoder | None = None,
-):
+) -> tuple[torch.Tensor, torch.Tensor, LabelEncoder]:
     """
     Pad/truncate sequences and stack into a channels-first tensor.
     Returns X: (N, N_DIMS, pad_len), y: (N,), le.
     """
-    import torch
     X_list = [pad_or_truncate(r["seq"], pad_len) for r in split_records]
     X      = np.stack(X_list, axis=0)       # (N, pad_len, N_DIMS)
     X      = X.transpose(0, 2, 1)           # (N, N_DIMS, pad_len)  channels-first
