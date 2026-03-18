@@ -111,13 +111,15 @@ Two notebooks are provided:
 | Notebook | Dataset | Pieces | CV Strategy | Purpose |
 |----------|---------|--------|-------------|---------|
 | `gamelan_classification.ipynb` | `dataset/` | 35 | LOOCV | Baseline experiment |
-| `gamelan_classification_augmented.ipynb` | Both augmented | 77 + 192 | LOGOCV (all 6 models) | Balanced vs unbalanced comparison |
+| `gamelan_classification_augmented.ipynb` | All three (35 + 77 + 192) | LOOCV / LOGOCV (all 6 models) | Three-way dataset comparison |
+
+Both notebooks use the same evaluation metric (LOOCV / LOGOCV, 35 folds) for all six models, making results directly comparable within and across notebooks.
 
 ```bash
 jupyter notebook gamelan_classification_augmented.ipynb
 ```
 
-Both notebooks cover dataset exploration, feature extraction, EDA, all six models with evaluation, and a comparative summary. The augmented notebook uses leak-free Leave-One-Group-Out CV to ensure no transposition of a test piece appears in training.
+All evaluations use 35-fold leave-one-out (original) or leave-one-group-out (augmented) cross-validation, ensuring that no transposition of a test piece ever appears in training.
 
 ### Generating the Augmented Dataset
 
@@ -194,15 +196,17 @@ The `extract_features()` function produces a **29-dimensional float32 vector** p
 
 ## Evaluation Protocol
 
-### Baseline (35 pieces)
+All three datasets are evaluated under the **same 35-fold leave-one-out / leave-one-group-out protocol** for all six models, making accuracy and macro-F1 directly comparable:
 
-- **Leave-One-Out Cross-Validation (LOOCV):** For classical models (DT, RF, SVM, KNN). Trains on 34 pieces, tests on 1, repeated 35 times.
-- **Stratified hold-out split (4 train / 1 test per genre):** For neural models (MLP, CNN) and visualisation.
+| Dataset | CV Method | Folds | What's held out per fold |
+|---------|-----------|-------|------------------------|
+| Original (35) | LOOCV | 35 | 1 piece |
+| Balanced (77) | LOGOCV | 35 | 1 original + its transpositions |
+| Unbalanced (192) | LOGOCV | 35 | 1 original + its transpositions |
 
-### Augmented (77 balanced / 192 unbalanced pieces)
-
-- **Leave-One-Group-Out CV (LOGOCV) for all six models:** Each group = one original piece + all its transpositions. 35 folds — prevents any transposition of a test piece from appearing in training. Neural models (MLP, CNN) use a custom per-fold training loop with 300 epochs.
-- **Leak-free stratified hold-out (visualisation only):** Groups by original piece name; all variants of train-originals go to train, all variants of test-originals go to test. Used for training curves and embedding plots.
+- **Classical models (DT, RF, SVM, KNN):** Via `cross_val_predict`. SVM and KNN use `Pipeline(StandardScaler, model)` for proper per-fold scaling.
+- **Neural models (MLP, 1D CNN):** Custom per-fold training loop (300 epochs, per-fold scaler, class-weighted loss for augmented datasets).
+- **Hold-out split** is used only for neural-model training curves and embedding visualisation — it does not contribute to the primary metrics.
 
 ## Module Dependency Graph
 
