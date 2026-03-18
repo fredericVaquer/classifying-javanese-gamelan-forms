@@ -30,7 +30,7 @@ from torch.utils.data import TensorDataset, DataLoader
 from sklearn.metrics import classification_report
 
 from .data import load_corpus_sequences, stratified_split, to_tensors
-from .parser import N_DIMS, PAD_LEN as _PAD_LEN_DEFAULT
+from .parser import N_DIMS
 from .plots import (
     plot_training_curves,
     plot_confusion_matrix,
@@ -103,12 +103,16 @@ def train_model(
     dropout: float  = 0.3,
     weight_decay: float = 1e-3,
     batch_size: int = 8,
+    class_weights: np.ndarray | None = None,
+    verbose: bool   = True,
 ) -> tuple[GamelanCNN, dict]:
+
+    loss_weight = torch.tensor(class_weights, dtype=torch.float32) if class_weights is not None else None
 
     loader    = DataLoader(TensorDataset(X_tr, y_tr), batch_size=batch_size,
                            shuffle=True, generator=torch.Generator().manual_seed(42))
     model     = GamelanCNN(n_classes, dropout)
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(weight=loss_weight)
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=n_epochs)
     history   = {"train_loss": [], "test_loss": [], "train_acc": [], "test_acc": []}
@@ -129,7 +133,7 @@ def train_model(
             history["train_acc"].append( (trl.argmax(1) == y_tr).float().mean().item())
             history["test_acc"].append(  (tel.argmax(1) == y_te).float().mean().item())
 
-        if epoch % 100 == 0 or epoch == 1:
+        if verbose and (epoch % 100 == 0 or epoch == 1):
             print(f"  epoch {epoch:4d}  "
                   f"train loss {history['train_loss'][-1]:.4f}  "
                   f"acc {history['train_acc'][-1]:.1%}  │  "

@@ -23,10 +23,10 @@ Transposition rules
   • A transposition is skipped entirely for a piece if ANY note would
     land outside the 3-octave font range (octave ∉ {−1, 0, +1}).
 
-Usage
-  python make_augmented_dataset.py
-  python make_augmented_dataset.py --src dataset --dst dataset_augmented
-  python make_augmented_dataset.py --no-balance   # skip the cap
+Usage (from project root)
+  python src/make_augmented_dataset.py
+  python src/make_augmented_dataset.py --src dataset --dst dataset_augmented
+  python src/make_augmented_dataset.py --no-balance   # skip the cap
 
 Requirements
   pip install pdfplumber reportlab

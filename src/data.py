@@ -90,17 +90,20 @@ def stratified_split(records: list[dict]) -> tuple[list[dict], list[dict]]:
         for r in songs:
             by_orig[original_name(r["song_name"])].append(r)
 
-        # Sort original names alphabetically for reproducibility
+        # Pick the test original as the one with the largest group
+        # (most transpositions) so the hold-out test set is informative.
+        # Ties broken alphabetically for reproducibility.
         orig_names = sorted(by_orig.keys())
         n_orig = len(orig_names)
+        ranked = sorted(orig_names, key=lambda o: (-len(by_orig[o]), o))
 
         if n_orig >= 5:
-            train_origs = orig_names[:4]
-            test_origs  = orig_names[4:5]
+            test_origs  = ranked[:1]
+            train_origs = [o for o in orig_names if o not in test_origs]
         elif n_orig == 4:
             print(f"  ℹ️   {genre}: 4 originals → 3 train / 1 test (LOO fallback)")
-            train_origs = orig_names[:3]
-            test_origs  = orig_names[3:4]
+            test_origs  = ranked[:1]
+            train_origs = [o for o in orig_names if o not in test_origs]
         else:
             print(f"  ⚠️   {genre}: only {n_orig} original(s) — skipping test sample")
             for orig in orig_names:

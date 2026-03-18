@@ -86,6 +86,8 @@ def train(
     dropout: float  = 0.3,
     weight_decay: float = 1e-3,
     batch_size: int = 8,
+    class_weights: np.ndarray | None = None,
+    verbose: bool   = True,
 ) -> tuple[GamelanMLP, dict]:
 
     Xtr = torch.tensor(X_tr, dtype=torch.float32)
@@ -93,10 +95,12 @@ def train(
     Xte = torch.tensor(X_te, dtype=torch.float32)
     yte = torch.tensor(y_te, dtype=torch.long)
 
+    loss_weight = torch.tensor(class_weights, dtype=torch.float32) if class_weights is not None else None
+
     loader    = DataLoader(TensorDataset(Xtr, ytr), batch_size=batch_size,
                            shuffle=True, generator=torch.Generator().manual_seed(42))
     model     = GamelanMLP(X_tr.shape[1], n_classes, dropout)
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(weight=loss_weight)
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=n_epochs)
     history   = {"train_loss": [], "test_loss": [], "train_acc": [], "test_acc": []}
@@ -117,7 +121,7 @@ def train(
             history["train_acc"].append( (trl.argmax(1) == ytr).float().mean().item())
             history["test_acc"].append(  (tel.argmax(1) == yte).float().mean().item())
 
-        if epoch % 100 == 0 or epoch == 1:
+        if verbose and (epoch % 100 == 0 or epoch == 1):
             print(f"  epoch {epoch:4d}  "
                   f"train loss {history['train_loss'][-1]:.4f}  "
                   f"acc {history['train_acc'][-1]:.1%}  │  "

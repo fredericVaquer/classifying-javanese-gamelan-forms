@@ -249,7 +249,6 @@ def plot_register_usage(stats: dict, out_dir: Path, colors: dict):
                label=lab, color=rc, alpha=0.87, edgecolor="white", linewidth=0.8)
 
     ax.set_xticks(x + width)
-    ax.set_xticks(range(len(genres)))
     ax.set_xticklabels(genres, rotation=30, ha="right", fontsize=9)
     ax.legend(title="Register", framealpha=0.7, fontsize=9)
     style_ax(ax, title="Register Usage by Genre", ylabel="% of sounding notes")

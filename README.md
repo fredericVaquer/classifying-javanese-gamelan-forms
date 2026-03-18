@@ -25,14 +25,20 @@ The project uses the **Javanese Gamelan Notation Dataset** (Kurniawati et al., *
 | Sampak         | 5      | Slendro             | 2–4 gatras per gong, fast tempo    |
 | Srepegan       | 5      | Slendro             | Irregular gatras per gong          |
 
-### Augmented Dataset
+### Augmented Datasets
 
-An augmented version of the corpus is provided in `dataset_augmented/`, created via **pitch transposition** — each original piece is shifted by ±1 to ±4 scale degrees within the 7-tone Kepatihan system. This produces **192 pieces** with an uneven class distribution (11–45 pieces per form, depending on how many transpositions remain within the valid pitch range). The augmented dataset enables Leave-One-Group-Out cross-validation (LOGOCV) for more robust evaluation.
+Two augmented versions are provided, both created via **pitch transposition** — each original piece is shifted by ±1–7 scale degrees within the 7-tone Kepatihan system:
 
-The script to generate the augmented dataset has a flag allowing for uneven class distribution. If run without, the classes are even but this one is bounded by the maximum number of possible transpositions available in the class that allows for less (Ayak ayak), giving a dataset of 11 pieces per form. Run:
+| Directory | Pieces | Balance | Generation |
+|-----------|--------|---------|------------|
+| `dataset_augmented/` | 192 | Unbalanced (11–45 per form) | `--no-balance` |
+| `dataset_augmented_balanced/` | 77 | Balanced (11 per form) | Default |
+
+The balanced variant caps every genre to the minimum natural yield (11 pieces, bounded by Ayak-Ayak), eliminating class imbalance entirely. The unbalanced variant retains all valid transpositions and relies on class weighting to compensate.
 
 ```bash
-python src/make_augmented_dataset.py --no-balance --src dataset --dst dataset_augmented
+python src/make_augmented_dataset.py --dst dataset_augmented_balanced          # balanced (default)
+python src/make_augmented_dataset.py --no-balance --dst dataset_augmented      # unbalanced
 ```
 
 **Citation:**
@@ -45,7 +51,7 @@ python src/make_augmented_dataset.py --no-balance --src dataset --dst dataset_au
 ```
 .
 ├── gamelan_classification.ipynb               # Baseline experiment — 35 original pieces
-├── gamelan_classification_augmented.ipynb      # Augmented experiment — 192 pieces (start here)
+├── gamelan_classification_augmented.ipynb      # Augmented experiment — balanced vs unbalanced (start here)
 ├── requirements.txt                           # Python dependencies
 ├── README.md
 ├── LICENSE
@@ -59,7 +65,8 @@ python src/make_augmented_dataset.py --no-balance --src dataset --dst dataset_au
 │   ├── statistical_analysis.py       # Corpus-level statistical analysis and plots
 │   ├── gamelan_classifier.py         # Decision Tree (CLI)
 │   ├── gamelan_mlp.py                # MLP classifier (CLI)
-│   └── gamelan_cnn.py                # 1D CNN classifier (CLI)
+│   ├── gamelan_cnn.py                # 1D CNN classifier (CLI)
+│   └── make_augmented_dataset.py    # Pitch-transposition augmentation script
 │
 ├── dataset/                          # Original Kepatihan notation PDFs (35 pieces)
 │   ├── Ayak Ayak/
@@ -70,7 +77,10 @@ python src/make_augmented_dataset.py --no-balance --src dataset --dst dataset_au
 │   ├── Sampak/
 │   └── Srepegan/
 │
-├── dataset_augmented/                # Pitch-transposed augmented PDFs (192 pieces)
+├── dataset_augmented/                # Pitch-transposed augmented PDFs — unbalanced (192 pieces)
+│   └── (same genre structure as dataset/)
+│
+├── dataset_augmented_balanced/       # Pitch-transposed augmented PDFs — balanced (77 pieces)
 │   └── (same genre structure as dataset/)
 │
 ├── docs/                             # Reference papers
@@ -101,13 +111,25 @@ Two notebooks are provided:
 | Notebook | Dataset | Pieces | CV Strategy | Purpose |
 |----------|---------|--------|-------------|---------|
 | `gamelan_classification.ipynb` | `dataset/` | 35 | LOOCV | Baseline experiment |
-| `gamelan_classification_augmented.ipynb` | `dataset_augmented/` | 192 | Leave-One-Group-Out | Augmented experiment |
+| `gamelan_classification_augmented.ipynb` | Both augmented | 77 + 192 | LOGOCV (all 6 models) | Balanced vs unbalanced comparison |
 
 ```bash
 jupyter notebook gamelan_classification_augmented.ipynb
 ```
 
 Both notebooks cover dataset exploration, feature extraction, EDA, all six models with evaluation, and a comparative summary. The augmented notebook uses leak-free Leave-One-Group-Out CV to ensure no transposition of a test piece appears in training.
+
+### Generating the Augmented Dataset
+
+The augmented dataset is built from the original 35-piece corpus via pitch transposition:
+
+```bash
+python src/make_augmented_dataset.py                          # balanced (default)
+python src/make_augmented_dataset.py --no-balance             # keep all valid shifts
+python src/make_augmented_dataset.py --src dataset --dst dataset_augmented
+```
+
+The script shifts each piece by ±1–7 scale degrees, keeping only transpositions where every note remains within the 3-octave font range. By default it caps all genres to the minimum natural yield for class balance; use `--no-balance` to retain all valid transpositions. Requires `reportlab` for PDF generation.
 
 ### Alternative: Command-Line Scripts
 
@@ -163,12 +185,12 @@ The `extract_features()` function produces a **29-dimensional float32 vector** p
 
 | Model          | Input                  | Approach                                         |
 |----------------|------------------------|--------------------------------------------------|
-| Decision Tree  | 29 features            | Interpretable split rules, depth sweep           |
-| Random Forest  | 29 features            | Ensemble of decision trees, reduced variance     |
-| SVM (RBF)      | 29 features (scaled)   | Kernel-based max-margin classifier               |
-| KNN            | 29 features (scaled)   | Distance-based nearest-neighbor voting           |
-| MLP            | 29 features (scaled)   | Two-hidden-layer neural network (64→32→7)        |
-| 1D CNN         | Raw sequences (7×T)    | Convolutional filters over time, no feature eng. |
+| Decision Tree  | 29 features            | Interpretable split rules, depth sweep, `class_weight='balanced'` |
+| Random Forest  | 29 features            | Ensemble of decision trees, `class_weight='balanced'` |
+| SVM (RBF)      | 29 features (Pipeline) | Kernel-based, `class_weight='balanced'`, per-fold scaling |
+| KNN            | 29 features (Pipeline) | Distance-weighted voting, per-fold scaling       |
+| MLP            | 29 features (scaled)   | Two-hidden-layer neural network, weighted `CrossEntropyLoss` |
+| 1D CNN         | Raw sequences (7×T)    | Convolutional filters over time, weighted `CrossEntropyLoss` |
 
 ## Evaluation Protocol
 
@@ -177,10 +199,10 @@ The `extract_features()` function produces a **29-dimensional float32 vector** p
 - **Leave-One-Out Cross-Validation (LOOCV):** For classical models (DT, RF, SVM, KNN). Trains on 34 pieces, tests on 1, repeated 35 times.
 - **Stratified hold-out split (4 train / 1 test per genre):** For neural models (MLP, CNN) and visualisation.
 
-### Augmented (192 pieces)
+### Augmented (77 balanced / 192 unbalanced pieces)
 
-- **Leave-One-Group-Out CV (LOGOCV):** Each group = one original piece + all its transpositions. 35 folds — prevents any transposition of a test piece from appearing in training.
-- **Leak-free stratified hold-out:** Groups by original piece name; all variants of train-originals go to train, all variants of test-originals go to test.
+- **Leave-One-Group-Out CV (LOGOCV) for all six models:** Each group = one original piece + all its transpositions. 35 folds — prevents any transposition of a test piece from appearing in training. Neural models (MLP, CNN) use a custom per-fold training loop with 300 epochs.
+- **Leak-free stratified hold-out (visualisation only):** Groups by original piece name; all variants of train-originals go to train, all variants of test-originals go to test. Used for training curves and embedding plots.
 
 ## Module Dependency Graph
 
@@ -198,7 +220,7 @@ parser.py
 ## Notes and Caveats
 
 - **Small dataset.** With 35 original pieces across 7 forms, all models are susceptible to overfitting. LOOCV/LOGOCV and the depth sweep are specifically designed to surface this.
-- **Augmentation class imbalance.** Not all pieces yield the same number of valid pitch transpositions, so the augmented dataset has uneven class sizes (11–45 pieces per form). This affects hold-out evaluation more than LOGOCV.
+- **Balanced vs unbalanced trade-off.** The balanced dataset (77 pieces) eliminates class imbalance but provides fewer training examples per fold. The unbalanced dataset (192 pieces) provides more data but requires class weighting. The notebook runs both and compares.
 - **PDF parsing edge cases.** Some pieces (e.g., Srepegan Manyura) may produce 0 events due to PDF encoding issues. The CNN handles this with zero-padding. Ayak Ayak Pamungkas produces ~3400 events due to repeated sections — the p95 truncation prevents this outlier from distorting tensor dimensions.
 - **PyTorch dependency.** The MLP and CNN require PyTorch. The classical models run on scikit-learn only. The `torch` import in `src/data.py` is lazy — classical-only workflows do not require PyTorch.
 
